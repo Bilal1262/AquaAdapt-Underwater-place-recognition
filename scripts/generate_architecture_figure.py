@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import cv2
@@ -14,24 +15,31 @@ from aquaadapt.augmentations.pipeline import apply_corruption
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "results" / "architecture"
+OUTPUT = ROOT / "docs" / "assets"
+DATA_ROOT = Path(
+    os.environ.get(
+        "AQUAADAPT_DATA_ROOT",
+        "/mnt/windows/datasets/ntnu_underwater",
+    )
+)
 
-MCLAB1 = Path(
-    "/mnt/windows/datasets/ntnu_underwater/processed/mclab_1/"
-    "alphasense_driver_ros_cam0/images/1725639605740139511.jpg"
+MCLAB1 = DATA_ROOT / (
+    "processed/mclab_1/alphasense_driver_ros_cam0/"
+    "images/1725639605740139511.jpg"
 )
-MCLAB2 = Path(
-    "/mnt/windows/datasets/ntnu_underwater/processed/mclab_2/"
-    "alphasense_driver_ros_cam0/images/1725640099934219906.jpg"
+MCLAB2 = DATA_ROOT / (
+    "processed/mclab_2/alphasense_driver_ros_cam0/"
+    "images/1725640099934219906.jpg"
 )
-FJORD1 = Path(
-    "/mnt/windows/datasets/ntnu_underwater/processed/fjord_1/"
-    "alphasense_driver_ros_cam0/images/1700604887984044160.jpg"
+FJORD1 = DATA_ROOT / (
+    "processed/fjord_1/alphasense_driver_ros_cam0/"
+    "images/1700604887984044160.jpg"
 )
-RETRIEVAL = ROOT / (
-    "results/fjord1_heldout_from_mclab12/qualitative/"
-    "query_1128_haze_s2.png"
+FJORD2 = DATA_ROOT / (
+    "processed/fjord_2/alphasense_driver_ros_cam0/"
+    "images/1700601715036241088.jpg"
 )
+RETRIEVAL = ROOT / "docs/assets/fjord2_haze_retrieval_example.png"
 
 NAVY = "#10233f"
 BLUE = "#1768d2"
@@ -293,10 +301,10 @@ def split_manifest_card(ax: plt.Axes, x: float, y: float, width: float, height: 
         color=INK,
         va="center",
     )
-    total = 3614
-    values = [2746, 145, 723]
+    total = 4998
+    values = [3798, 200, 1000]
     colors = [BLUE, "#91a0b5", TEAL]
-    labels = ["train 2,746", "guard 145", "val 723"]
+    labels = ["train 3,798", "guard 200", "val 1,000"]
     left = x + 0.012
     usable = width - 0.024
     bar_y = y + 0.041
@@ -327,7 +335,7 @@ def split_manifest_card(ax: plt.Axes, x: float, y: float, width: float, height: 
     ax.text(
         x + width - 0.011,
         y + height - 0.025,
-        "3,614 frames",
+        "4,998 frames",
         transform=ax.transAxes,
         fontsize=6.3,
         fontweight="bold",
@@ -369,7 +377,7 @@ def retrieval_triptych(
     ax.text(
         x + 0.012,
         y + height - 0.021,
-        "Held-out Fjord example · haze severity 2",
+        "Held-out Fjord2 example · haze severity 2",
         transform=ax.transAxes,
         fontsize=7.8,
         fontweight="bold",
@@ -385,8 +393,8 @@ def retrieval_triptych(
     ]
     captions = [
         ("Corrupted query", "test input", VIOLET),
-        ("Raw DINOv2", "14.61 m · incorrect", RED),
-        ("AquaAdapt", "0.79 m · positive", GREEN),
+        ("Raw DINOv2", "14.11 m · incorrect", RED),
+        ("AquaAdapt V2", "0.82 m · positive", GREEN),
     ]
     pad = 0.012
     gap = 0.010
@@ -437,7 +445,7 @@ def robustness_card(ax: plt.Axes, x: float, y: float, width: float, height: floa
     ax.text(
         x + 0.012,
         y + height - 0.021,
-        "Held-out robustness · Fjord 1",
+        "Held-out robustness · Fjord2",
         transform=ax.transAxes,
         fontsize=7.8,
         fontweight="bold",
@@ -445,8 +453,8 @@ def robustness_card(ax: plt.Axes, x: float, y: float, width: float, height: floa
         va="center",
     )
     groups = [
-        ("clean", 0.5608, 0.4755),
-        ("snow · severity 3", 0.2417, 0.2780),
+        ("clean", 0.3534, 0.3564),
+        ("macro · severity 3", 0.2812, 0.3353),
     ]
     base_y = y + 0.024
     max_h = height - 0.066
@@ -499,13 +507,14 @@ def robustness_card(ax: plt.Axes, x: float, y: float, width: float, height: floa
 
 
 def main() -> None:
-    for path in (MCLAB1, MCLAB2, FJORD1, RETRIEVAL):
+    for path in (MCLAB1, MCLAB2, FJORD1, FJORD2, RETRIEVAL):
         if not path.is_file():
             raise FileNotFoundError(path)
 
     mclab1 = read_rgb(MCLAB1)
     mclab2 = read_rgb(MCLAB2)
     fjord1 = read_rgb(FJORD1)
+    fjord2 = read_rgb(FJORD2)
     retrieval = read_rgb(RETRIEVAL)
     clean_bgr = cv2.cvtColor(mclab1, cv2.COLOR_RGB2BGR)
     low = cv2.cvtColor(
@@ -570,18 +579,17 @@ def main() -> None:
         0.145,
         0.128,
         "Fjord 1",
-        "1,384 test-only frames",
-        VIOLET,
-        dashed=True,
+        "training · cam0",
+        BLUE,
     )
     ax.text(
         0.889,
         0.718,
-        "UNSEEN ENVIRONMENT · 98.05% POSE COVERAGE",
+        "THREE TRAINING TRAJECTORIES · BALANCED SAMPLING",
         transform=ax.transAxes,
         fontsize=5.7,
         fontweight="bold",
-        color=VIOLET,
+        color=BLUE,
         ha="center",
     )
 
@@ -595,8 +603,8 @@ def main() -> None:
         0.530,
         0.215,
         0.125,
-        "Two stochastic views",
-        "low light · marine snow",
+        "One controlled corrupted view",
+        "one degradation per sample",
         TEAL,
         dashed=True,
     )
@@ -622,8 +630,8 @@ def main() -> None:
         0.414,
         0.155,
         0.070,
-        "Projection head",
-        "384 → 512 → 256 · GELU · dropout · L2 norm",
+        "Residual adapter",
+        "384 → 512 → 384 · scaled residual · L2 norm",
         TEAL,
     )
     arrow(ax, (0.526, 0.449), (0.550, 0.449), color=TEAL)
@@ -634,9 +642,9 @@ def main() -> None:
         0.152,
         0.070,
         "AquaAdapt descriptor",
-        "compact robust place representation",
+        "DINO-preserving robust representation",
         TEAL,
-        badge="256-D",
+        badge="384-D",
     )
     descriptor_bars(ax, 0.570, 0.424, 0.116, 0.018)
     arrow(ax, (0.708, 0.449), (0.733, 0.449), color=TEAL)
@@ -646,15 +654,15 @@ def main() -> None:
         0.414,
         0.225,
         0.070,
-        "Multi-positive InfoNCE",
-        "same frame + nearby pose → closer\nother places → farther · balanced MCLab sampling",
+        "Multi-objective adaptation",
+        "InfoNCE + DINO geometry preservation\n+ clean/corrupt consistency",
         TEAL,
         badge="SELF-SUPERVISED",
     )
 
     # 3 · Retrieval and evaluation
     section(ax, "3", "RETRIEVAL +\nEVALUATION", 0.094, 0.278, VIOLET, VIOLET_LIGHT)
-    image_card(ax, fjord1, 0.145, 0.276, 0.130, 0.073, "Fjord query", "test-only", VIOLET)
+    image_card(ax, fjord2, 0.145, 0.276, 0.130, 0.073, "Fjord2 query", "held-out", VIOLET)
     arrow(ax, (0.278, 0.312), (0.300, 0.312), color=VIOLET)
     text_card(
         ax,
@@ -663,7 +671,7 @@ def main() -> None:
         0.135,
         0.073,
         "AquaAdapt encoder",
-        "frozen checkpoint\nnormalized 256-D query",
+        "frozen checkpoint\nnormalized 384-D query",
         VIOLET,
     )
     arrow(ax, (0.441, 0.312), (0.464, 0.312), color=VIOLET)
@@ -707,7 +715,7 @@ def main() -> None:
     ax.text(
         0.5,
         0.049,
-        "TRAIN  ·  MCLab 1 + MCLab 2     →     TEST  ·  Fjord 1 (unseen environment)",
+        "TRAIN  ·  MCLab 1 + MCLab 2 + Fjord 1     →     TEST  ·  Fjord 2 (held-out trajectory)",
         transform=ax.transAxes,
         ha="center",
         va="center",
@@ -718,7 +726,7 @@ def main() -> None:
     ax.text(
         0.972,
         0.018,
-        "Final held-out Fjord results from the early-stopped MCLab 1+2 checkpoint (best epoch 15).",
+        "Final held-out Fjord2 results from the three-trajectory V2 checkpoint (best epoch 24).",
         transform=ax.transAxes,
         ha="right",
         va="center",
@@ -727,9 +735,8 @@ def main() -> None:
     )
 
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    stem = OUTPUT / "aquaadapt_real_data_architecture"
+    stem = OUTPUT / "aquaadapt_architecture"
     fig.savefig(stem.with_suffix(".png"), dpi=180, facecolor=fig.get_facecolor())
-    fig.savefig(stem.with_suffix(".pdf"), dpi=180, facecolor=fig.get_facecolor())
     fig.savefig(stem.with_suffix(".svg"), facecolor=fig.get_facecolor())
     plt.close(fig)
     print(stem.with_suffix(".png"))

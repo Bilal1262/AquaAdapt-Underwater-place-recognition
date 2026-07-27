@@ -19,6 +19,7 @@ datasets/
 *.npz
 *.parquet
 *.mp4
+!docs/assets/*.mp4
 *.log
 .DS_Store
 .idea/

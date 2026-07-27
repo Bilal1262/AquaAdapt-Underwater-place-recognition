@@ -9,6 +9,14 @@ image path, nearest pose and time error, position, normalized quaternion, validi
 split. CSV is authoritative; Parquet is also written when an engine is installed.
 
 For one trajectory, adjacent frames are kept in chronological blocks separated by guard
-gaps. For multiple trajectories, `trajectory_splits` assigns whole trajectory IDs, so
-adding `mclab_2` requires new configuration/manifests rather than a pipeline redesign.
+gaps. For multi-trajectory training, source manifests are concatenated and chronological
+train/guard/validation blocks are assigned independently inside each trajectory. The
+original source manifests are never modified.
 
+Every row retains `trajectory_id`. Temporal and spatial positive mining explicitly masks
+out observations from other trajectories because their pose coordinate systems are not
+assumed to share a reference frame. Weighted sampling gives each training trajectory
+equal expected contribution even when their frame counts differ.
+
+Held-out evaluation configurations use `splits.policy: all_test`; no frame from that
+trajectory enters training or checkpoint selection.

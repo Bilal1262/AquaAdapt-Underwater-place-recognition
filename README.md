@@ -1,178 +1,266 @@
+<div align="center">
+
 # AquaAdapt
 
-**Self-Supervised Adaptation of DINOv2 for Robust Underwater Place Recognition**
+### Self-supervised DINOv2 adaptation for robust underwater place recognition
 
-AquaAdapt is a reproducible research pipeline for extracting an RGB stream from an NTNU
-ROS1 bag, associating images with a TUM reference trajectory, adapting DINOv2 ViT-S/14
-with controlled underwater degradations, and evaluating place retrieval with pose-based
-ground truth. It intentionally addresses visual place recognition only—not SLAM, visual
-odometry, sonar fusion, depth, segmentation, or navigation.
+**Real ROS1 imagery · pose-based ground truth · held-out trajectory evaluation**
 
-```mermaid
-flowchart LR
-    A[ROS1 bag] --> B[RGB frame extraction]
-    C[TUM trajectory] --> D[Timestamp-pose association]
-    B --> E[Dataset manifest]
-    D --> E
-    E --> F1[Clean view]
-    E --> F2[Underwater augmented view]
-    F1 --> G[DINOv2 ViT-S/14]
-    F2 --> G
-    G --> H[Projection head 384 to 256]
-    H --> I[Multi-positive contrastive loss]
-    H --> J[Normalized place descriptor]
-    J --> K[FAISS exact cosine retrieval]
-    K --> L[Pose-based Recall and robustness evaluation]
-```
+[Results](#held-out-fjord2-results) ·
+[Visual comparison](#qualitative-retrievals) ·
+[Training](#training-behavior) ·
+[Reproduction](#reproduce-the-final-experiment) ·
+[Limitations](#scope-and-limitations)
+
+</div>
+
+<p align="center">
+  <img src="docs/assets/aquaadapt_architecture.svg"
+       alt="AquaAdapt V2 real-data system architecture"
+       width="100%">
+</p>
+
+> **Final protocol:** train the residual AquaAdapt V2 adapter on **MCLab1 +
+> MCLab2 + Fjord1**, freeze the checkpoint, and evaluate on **Fjord2**, which is
+> never used for training, validation, or model selection.
+>
+> **Main result:** AquaAdapt preserves clean DINOv2 retrieval and improves
+> Recall@1 for every tested corruption at every nonzero severity on held-out
+> Fjord2. The improvement grows from **+1.8 pp** at severity 1 to **+5.4 pp** at
+> severity 3.
+
+## What AquaAdapt does
+
+AquaAdapt converts an underwater RGB frame into a normalized place descriptor
+for cosine-similarity retrieval. The system:
+
+1. extracts a visible camera stream from ROS1 bags at 5 Hz;
+2. associates each frame with the nearest TUM reference pose;
+3. obtains a frozen 384-D DINOv2 ViT-S/14 CLS descriptor;
+4. learns a zero-initialized residual correction from controlled underwater
+   degradations; and
+5. evaluates retrieval with geometric positives, temporal exclusion, coverage,
+   Recall@K, MRR, and translation error.
+
+For normalized DINOv2 feature \(x\), V2 computes
+
+\[
+z = \operatorname{normalize}\left(x + 0.25 f_\theta(x)\right),
+\]
+
+where \(f_\theta\) is a `384 → 512 → 384` residual adapter. Zero initialization
+makes the initial descriptor identical to raw DINOv2. Training combines
+multi-positive InfoNCE, DINO similarity-geometry preservation, and clean/corrupt
+consistency.
+
+## Held-out Fjord2 results
+
+The database contains 1,096 clean reference frames. Of 1,095 candidate queries,
+665 have at least one valid revisit after the 10-second exclusion window,
+giving **60.73% evaluation coverage**. Metrics below use only those eligible
+queries.
+
+| Method | Recall@1 | Recall@5 | Recall@10 | MRR | Median top-1 error |
+|---|---:|---:|---:|---:|---:|
+| Raw DINOv2 | 35.34% | 49.32% | 56.24% | 42.34% | 2.63 m |
+| **AquaAdapt V2** | **35.64%** | **51.13%** | **57.44%** | **42.59%** | **2.48 m** |
+| Change | **+0.30 pp** | **+1.80 pp** | **+1.20 pp** | **+0.25 pp** | **−0.15 m** |
+
+The clean Recall@1 improvement is deliberately described as modest. The
+stronger result is consistent robustness under domain-relevant degradation.
+
+<p align="center">
+  <img src="docs/assets/fjord2_robustness_overview.png"
+       alt="Raw DINOv2 versus AquaAdapt robustness on held-out Fjord2"
+       width="100%">
+</p>
+
+| Severity | Raw DINOv2 Recall@1 | AquaAdapt Recall@1 | Change |
+|---:|---:|---:|---:|
+| Clean | 35.34% | **35.64%** | **+0.30 pp** |
+| 1 | 35.01% | **36.78%** | **+1.77 pp** |
+| 2 | 32.42% | **35.76%** | **+3.34 pp** |
+| 3 | 28.12% | **33.53%** | **+5.41 pp** |
+
+At severity 3, AquaAdapt improves Recall@1 by **+9.32 pp** in low light,
+**+8.57 pp** under haze, **+4.06 pp** under color attenuation, **+3.16 pp**
+under marine snow, and **+1.95 pp** under blur.
+
+Machine-readable tables are available in
+[`docs/results/`](docs/results/).
+
+## Qualitative retrievals
+
+The panel below is generated from a real held-out Fjord2 query under
+severity-2 haze. Raw DINOv2 selects a frame **14.11 m** away; AquaAdapt returns
+a pose-positive match **0.82 m** away. Green borders indicate matches inside the
+1.5 m positive radius; red borders indicate incorrect retrievals.
+
+<p align="center">
+  <a href="docs/assets/fjord2_retrieval_highlights.mp4">
+    <img src="docs/assets/fjord2_haze_retrieval_example.png"
+         alt="Qualitative raw DINOv2 and AquaAdapt retrieval comparison"
+         width="100%">
+  </a>
+</p>
+
+<p align="center">
+  <strong>
+    <a href="docs/assets/fjord2_retrieval_highlights.mp4">
+      ▶ Watch the 32-second held-out retrieval highlight video
+    </a>
+  </strong>
+</p>
+
+The video cycles through genuine haze, low-light, color-attenuation, and
+marine-snow comparisons. The full gallery and long playback are generated
+locally rather than committed to Git.
+
+## Training behavior
+
+The final residual adapter trains for 30 epochs with a frozen DINOv2 backbone.
+The selected checkpoint is epoch **24**, with validation loss **0.6052**.
+Balanced trajectory sampling prevents the longest trajectory from dominating
+optimization.
+
+<p align="center">
+  <img src="docs/assets/training_curves_v2.png"
+       alt="AquaAdapt V2 training and objective-component curves"
+       width="100%">
+</p>
+
+Training uses:
+
+- one clean anchor and at most one corrupted view per sample;
+- low light, color attenuation, haze/backscatter, blur, and marine snow;
+- temporal and pose-near positives from the same trajectory only;
+- no positive mining across unrelated trajectory coordinate systems;
+- a frozen DINOv2 ViT-S/14 backbone; and
+- early-stopping checkpoint selection using training-domain validation only.
 
 ## Installation
 
-Python 3.10 or newer is required. DINOv2 is loaded only from the official
-`facebookresearch/dinov2` PyTorch Hub repository; no larger DINOv2 model or learned image
-enhancer is downloaded.
+Python 3.10 or newer is required.
 
 ```bash
-python3 -m pip install -e .
-aquaadapt --help
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -e ".[dev]"
+
+# Optional exact FAISS search; NumPy is the automatic fallback.
+python3 -m pip install -e ".[faiss]"
+
 pytest -q
+aquaadapt --help
 ```
 
-FAISS is optional. When it cannot be imported, AquaAdapt logs a warning and performs the
-same exact normalized inner-product search with NumPy.
+DINOv2 is loaded from the official `facebookresearch/dinov2` PyTorch Hub
+repository. The first run requires network access unless the model is already
+cached.
 
-## Configured data paths
+## Dataset
 
-The checked-in configs use:
+The experiments use the
+[`ntnu-arl/underwater-datasets`](https://huggingface.co/datasets/ntnu-arl/underwater-datasets)
+ROS1 bags and baseline TUM trajectories.
+
+```bash
+hf download ntnu-arl/underwater-datasets \
+  --repo-type dataset \
+  --include "subset-mclab/mclab_1/*" \
+  --include "subset-mclab/mclab_2/*" \
+  --include "subset-fjord/fjord_1/*" \
+  --include "subset-fjord/fjord_2/*" \
+  --local-dir /path/to/ntnu_underwater
+```
+
+Update the `paths` section of the selected YAML configuration to match the
+local dataset and DINOv2 cache locations. Bags, extracted frames, descriptor
+caches, and checkpoints are intentionally excluded from Git.
+
+See [`docs/dataset.md`](docs/dataset.md) for the frame/pose association and
+manifest policy.
+
+## Reproduce the final experiment
+
+The master runner lists every registered training/evaluation combination:
+
+```bash
+bash scripts/run_experiment_matrix.sh --list
+```
+
+Preview the final workflow without running anything:
+
+```bash
+bash scripts/run_experiment_matrix.sh --recommended --dry-run
+```
+
+After the MCLab1, MCLab2, and Fjord1 source manifests have been prepared, run
+the final training and held-out Fjord2 evaluation:
+
+```bash
+bash scripts/run_experiment_matrix.sh \
+  --recommended \
+  --skip-completed
+```
+
+The explicit commands are:
+
+```bash
+bash scripts/run_mclab12_fjord1_train_v2.sh
+bash scripts/run_fjord2_heldout_from_mclab12_fjord1_v2.sh
+```
+
+Generated outputs are written under `artifacts/` and `results/`; both
+directories are ignored by Git. Rebuild the public README figures from the
+curated CSVs with:
+
+```bash
+python3 scripts/generate_readme_figures.py
+AQUAADAPT_DATA_ROOT=/path/to/ntnu_underwater \
+  python3 scripts/generate_architecture_figure.py
+```
+
+## Repository structure
 
 ```text
-bag:          /mnt/windows/datasets/ntnu_underwater/subset-mclab/mclab_1/mclab_1.bag
-trajectory:   /mnt/windows/datasets/ntnu_underwater/subset-mclab/mclab_1/mclab_1_baseline.tum
-calibration:  /mnt/windows/datasets/ntnu_underwater/calibrations
-processed:    /mnt/windows/datasets/ntnu_underwater/processed
-TORCH_HOME:   /mnt/windows/datasets/model_cache/torch
+aquaadapt/
+  bag/              ROS1 inspection, decoding, extraction
+  trajectory/       TUM parsing and timestamp association
+  data/             manifests, guarded splits, positive sampling
+  augmentations/    controlled underwater degradations
+  models/           DINOv2 wrapper and residual adapter
+  losses/           multi-positive InfoNCE
+  training/         optimization, checkpointing, reproducibility
+  retrieval/        descriptor caches and cosine search
+  evaluation/       pose metrics, robustness, ablations, efficiency
+  visualization/    retrieval panels, maps, videos, plots
+configs/            reproducible experiment configurations
+scripts/            training, evaluation, matrix runner, figure generation
+tests/              synthetic unit and integration tests
+docs/               protocol, limitations, curated figures and result tables
 ```
 
-Original bag and TUM inputs are opened read-only. Extracted images, manifests, descriptor
-caches, and large checkpoints go under `processed`; source code and reports remain here.
-Calibration files are inventoried by `doctor` but raw image rectification is not required
-for the initial experiment.
+## Scope and limitations
 
-## Quick start
+- This is visual place recognition, not SLAM, odometry, navigation, depth
+  estimation, segmentation, or sonar fusion.
+- Fjord2 is an unseen **trajectory**, but Fjord1 is present during training;
+  this supports held-out-trajectory robustness, not a claim of universal unseen
+  underwater-environment generalization.
+- Only 665 of 1,095 Fjord2 candidate queries have a valid revisit after
+  temporal exclusion. Coverage is reported rather than fabricating positives.
+- Controlled corruptions are robustness probes, not a complete physical model
+  of underwater image formation.
+- Clean Recall@1 improves by only 0.30 percentage points. The strongest evidence
+  is the consistent corruption result, not broad clean-domain dominance.
 
-Run the complete bounded smoke pipeline:
+More detail is provided in
+[`docs/evaluation_protocol.md`](docs/evaluation_protocol.md) and
+[`docs/limitations.md`](docs/limitations.md).
 
-```bash
-bash scripts/run_quick_pipeline.sh
+
 ```
 
-It checks the environment, inspects all bag connections, auto-selects a real RGB topic,
-extracts at most 300 frames at 1 Hz, associates poses, creates guarded chronological
-splits, visualizes corruptions, validates DINOv2, evaluates the raw baseline, trains one
-short projection-head epoch, evaluates AquaAdapt, runs reduced robustness, and writes a
-report.
-
-Individual stages are inspectable:
-
-```bash
-aquaadapt doctor --config configs/mclab1.yaml
-aquaadapt inspect-bag --config configs/mclab1.yaml
-aquaadapt extract --config configs/quick.yaml --quick
-aquaadapt parse-trajectory --config configs/quick.yaml
-aquaadapt build-manifest --config configs/quick.yaml
-aquaadapt visualize-augmentations --config configs/quick.yaml
-aquaadapt check-backbone --config configs/quick.yaml
-aquaadapt baseline --config configs/quick.yaml --method raw_dinov2
-aquaadapt train --config configs/quick.yaml --mode projection_head_only --quick
-aquaadapt visualize-retrievals --config configs/quick.yaml \
-  --checkpoint /mnt/windows/datasets/ntnu_underwater/processed/checkpoints/mclab1_quick/projection_head_only/best.pt \
-  --quick
-```
-
-The retrieval visualizer writes an HTML gallery and PNG panels under
-`results/mclab1_quick/qualitative/`. Each panel compares raw DINOv2 and AquaAdapt top-5
-retrievals on the actual test images, with similarity, pose distance, time separation,
-and red/green pose-ground-truth borders. It also renders all five severity-controlled
-corruptions, a query/database similarity heatmap, and a trajectory map of top-1 links.
-The same directory includes `retrieval_comparison.mp4`, which plays the test queries next
-to the raw-DINOv2 and AquaAdapt top-1 retrievals.
-
-Run the complete experiment only when adequate compute and time are available:
-
-```bash
-bash scripts/run_full_pipeline.sh
-```
-
-## Extraction and manifests
-
-`rosbags.highlevel.AnyReader` reads ROS1 bags without a ROS master. Inspection lists every
-topic, message type, count, timestamps, approximate frequency, and decoded image
-properties. Topic selection rejects depth, disparity, masks, segmentation, and thermal
-streams, then favors a valid, high-count visible image stream. Override it with
-`extraction.camera_topic` or `inspect-bag --camera-topic`.
-
-Raw and compressed images are supported. Raw decoding respects `step`, padded rows, and
-endianness and handles BGR/RGB/mono/alpha/Bayer plus 16-bit and float single-channel
-inputs. Extraction samples by nanosecond bag time, is resumable, writes JPEGs named by
-timestamp, and atomically updates metadata. Pose association uses sorted binary search,
-not a quadratic scan. Timestamp offsets are configuration values and are never silently
-invented.
-
-The one-trajectory policy uses contiguous 60% train, 2% guard, 18% validation, 2% guard,
-and 18% test blocks. `trajectory_id` is retained in every row, and the split module also
-supports whole-trajectory assignments for future `mclab_2` experiments.
-
-## Training and evaluation
-
-The raw baseline is a normalized 384-D DINOv2 CLS descriptor. The classical comparison
-uses gray-world white balance, luminance CLAHE, and mild gamma correction before the same
-backbone. AquaAdapt learns a normalized 256-D projection using paired underwater-augmented
-views and in-batch negatives. The default backbone is frozen; the final one or two
-transformer blocks can be unfrozen with a separate learning rate.
-
-Evaluation builds interleaved query/database subsets from the test block, excludes the
-same frame and all database samples within the configured temporal window, and calls a
-retrieval correct only inside the configured translation radius. Queries with no valid
-post-exclusion positive are **ineligible**, excluded from Recall/MRR, and reported in
-coverage. The default protocol never substitutes timestamp proximity for place truth.
-
-Robustness uses a clean database and deterministically corrupted queries at severity
-0–3 for low light, channel attenuation, haze/backscatter, blur, and marine snow. Outputs
-include machine-readable CSV files and standard matplotlib plots.
-
-## Repository map
-
-```text
-aquaadapt/bag/            bag inventory, decoding, extraction
-aquaadapt/trajectory/     TUM parsing, geometry, timestamp association
-aquaadapt/data/           manifests, guarded splits, transforms, datasets
-aquaadapt/augmentations/  deterministic severity and stochastic training views
-aquaadapt/models/         official DINOv2 wrapper and projection head
-aquaadapt/losses/         stable multi-positive InfoNCE
-aquaadapt/training/       AMP training, schedules, checkpoints, logs
-aquaadapt/retrieval/      descriptor caches, FAISS/NumPy exact cosine search
-aquaadapt/evaluation/     pose protocol, robustness, ablations, efficiency
-aquaadapt/visualization/  trajectory, augmentation, training, retrieval figures
-configs/                  dataset, quick, and full YAML configurations
-scripts/                  turnkey quick/full workflows and optional ROS fallback
-tests/                    synthetic unit and integration-level tests
-docs/                     protocol and design details
-```
-
-## Results and reporting
-
-`aquaadapt report` reads completed artifacts and writes `results/<run>/report.md`,
-`summary.json`, and result CSVs. It never inserts synthetic metric values; unavailable
-ablation measurements are `NA`. Generated tables may be copied into this README after a
-completed run.
-
-## Limitations and extension
-
-These results are a single-trajectory development evaluation and do not establish
-cross-trajectory or cross-environment generalization. A trajectory without sufficient
-revisits can have low eligible-query coverage; AquaAdapt reports that rather than
-fabricating loop closures. A defensible final study should add `mclab_2` or another
-repeated trajectory and use whole-trajectory splits. The degradations are controlled
-robustness probes, not a full physical underwater renderer.
-
-
-Released under the MIT License. See [LICENSE](LICENSE).
+Released under the [MIT License](LICENSE).

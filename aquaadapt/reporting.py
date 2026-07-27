@@ -68,6 +68,21 @@ def generate_report(cfg: dict[str, Any]) -> Path:
             "These results are a single-trajectory development evaluation and do not establish "
             "cross-trajectory or cross-environment generalization."
         )
+    if str(cfg["model"].get("adapter_type", "mlp")) == "residual":
+        model_statement = (
+            "The raw baseline uses normalized 384-dimensional DINOv2 CLS features. "
+            "AquaAdapt V2 applies a zero-initialized 384→512→384 residual adapter, "
+            f"scaled by {float(cfg['model'].get('adapter_scale', 0.1)):.2f}, followed by "
+            "L2 normalization. Training combines multi-positive InfoNCE, DINO similarity-"
+            "geometry preservation, and clean/corrupt consistency. The backbone is frozen."
+        )
+    else:
+        model_statement = (
+            "The raw baseline uses normalized 384-dimensional DINOv2 CLS features. "
+            f"AquaAdapt applies a 384→512→{int(cfg['model']['descriptor_dim'])} projection "
+            "with GELU, dropout, and L2 normalization, trained with multi-positive InfoNCE "
+            "over underwater-degraded views. The backbone is frozen by default."
+        )
     report = f"""# AquaAdapt technical report
 
 ## 1. Objective
@@ -85,9 +100,7 @@ AquaAdapt studies self-supervised adaptation of DINOv2 ViT-S/14 descriptors for 
 
 ## 3. Model and training
 
-The raw baseline uses normalized 384-dimensional DINOv2 CLS features. AquaAdapt uses a
-384→512→256 projection with GELU, dropout, and L2 normalization, trained with multi-positive
-InfoNCE over underwater-degraded views. The backbone is frozen by default.
+{model_statement}
 
 ## 4. Evaluation protocol and coverage
 
@@ -116,8 +129,8 @@ The classical enhancement is a comparison baseline, not a state-of-the-art enhan
 ## 8. Reproduction
 
 ```bash
+bash scripts/run_experiment_matrix.sh --recommended
 bash scripts/run_quick_pipeline.sh
-bash scripts/run_full_pipeline.sh
 ```
 """
     destination = output / "report.md"
