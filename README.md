@@ -174,14 +174,5 @@ fabricating loop closures. A defensible final study should add `mclab_2` or anot
 repeated trajectory and use whole-trajectory splits. The degradations are controlled
 robustness probes, not a full physical underwater renderer.
 
-## Citation
-
-```bibtex
-@software{aquaadapt2026,
-  title = {AquaAdapt: Self-Supervised Adaptation of DINOv2 for Robust Underwater Place Recognition},
-  year = {2026},
-  note = {Research software; citation metadata to be finalized}
-}
-```
 
 Released under the MIT License. See [LICENSE](LICENSE).
