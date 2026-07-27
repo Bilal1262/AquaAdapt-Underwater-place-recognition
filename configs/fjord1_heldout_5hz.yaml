@@ -1,0 +1,84 @@
+project:
+  name: aquaadapt
+  seed: 42
+  run_name: fjord1_heldout_from_mclab12
+  evaluation_regime: held_out_environment_transfer
+  training_trajectory: mclab_1+mclab_2
+  evaluation_trajectory: fjord_1
+
+paths:
+  bag: /mnt/windows/datasets/ntnu_underwater/subset-fjord/fjord_1/fjord_1.bag
+  tum: /mnt/windows/datasets/ntnu_underwater/subset-fjord/fjord_1/fjord_1_baseline.tum
+  calibrations: /mnt/windows/datasets/ntnu_underwater/calibrations
+  # Keep evaluation descriptors local; image_path entries in the copied
+  # manifest continue to reference the immutable Fjord frames on the mount.
+  processed_root: /home/bb/Aqua_adapt/artifacts/fjord_eval
+  torch_home: /mnt/windows/datasets/model_cache/torch
+
+extraction:
+  # Match the physical camera used for MCLab 1+2 training.
+  camera_topic: /alphasense_driver_ros/cam0
+  sample_rate_hz: 5.0
+  max_frames: null
+  jpeg_quality: 95
+  overwrite: false
+  resume: true
+  pose_max_time_difference_sec: 0.10
+  timestamp_offset_sec: 0.0
+
+images:
+  model_size: 224
+  preserve_original: true
+
+model:
+  backbone: dinov2_vits14
+  backbone_dim: 384
+  descriptor_dim: 256
+  pooling: cls
+  freeze_backbone: true
+  unfreeze_last_n_blocks: 0
+  projection_hidden_dim: 512
+  projection_dropout: 0.1
+
+# Used for descriptor data loading only. This configuration never trains.
+training:
+  epochs: 40
+  batch_size: 32
+  num_workers: 4
+  head_learning_rate: 0.0003
+  backbone_learning_rate: 0.000002
+  weight_decay: 0.0001
+  temperature: 0.07
+  temporal_positive_window_sec: 1.0
+  temporal_positive_max_pose_distance_m: 0.75
+  use_temporal_positive: true
+  mixed_precision: true
+  early_stopping_patience: 8
+  gradient_clip_norm: 1.0
+  gradient_accumulation: 1
+
+# Every Fjord 1 frame is test-only. No fit or checkpoint selection may use it.
+splits:
+  policy: all_test
+  train: 0.00
+  guard1: 0.00
+  validation: 0.00
+  guard2: 0.00
+  test: 1.00
+
+evaluation:
+  pose_positive_radius_m: 1.5
+  temporal_exclusion_sec: 10.0
+  recalls: [1, 5, 10]
+  query_stride: 2
+  database_stride: 2
+  allow_progress_fallback: false
+
+robustness:
+  severity_levels: [0, 1, 2, 3]
+  corruptions:
+    - low_light
+    - color_attenuation
+    - haze
+    - blur
+    - marine_snow

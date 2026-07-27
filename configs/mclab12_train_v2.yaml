@@ -1,0 +1,104 @@
+project:
+  name: aquaadapt
+  seed: 42
+  run_name: mclab12_train_v2
+  evaluation_regime: multi_trajectory_training
+  training_trajectories: [mclab_1, mclab_2]
+
+paths:
+  bag: /mnt/windows/datasets/ntnu_underwater/subset-mclab/mclab_1/mclab_1.bag
+  tum: /mnt/windows/datasets/ntnu_underwater/subset-mclab/mclab_1/mclab_1_baseline.tum
+  training_manifests:
+    - /mnt/windows/datasets/ntnu_underwater/processed/mclab_1/alphasense_driver_ros_cam0/manifest.csv
+    - /mnt/windows/datasets/ntnu_underwater/processed/mclab_2/alphasense_driver_ros_cam0/manifest.csv
+  calibrations: /mnt/windows/datasets/ntnu_underwater/calibrations
+  processed_root: /home/bb/Aqua_adapt/artifacts
+  torch_home: /mnt/windows/datasets/model_cache/torch
+
+extraction:
+  camera_topic: /alphasense_driver_ros/cam0
+  sample_rate_hz: 5.0
+  max_frames: null
+  jpeg_quality: 95
+  overwrite: false
+  resume: true
+  pose_max_time_difference_sec: 0.10
+  timestamp_offset_sec: 0.0
+
+images:
+  model_size: 224
+  preserve_original: true
+
+model:
+  backbone: dinov2_vits14
+  backbone_dim: 384
+  descriptor_dim: 384
+  pooling: cls
+  freeze_backbone: true
+  unfreeze_last_n_blocks: 0
+  adapter_type: residual
+  adapter_scale: 0.25
+  projection_hidden_dim: 512
+  projection_dropout: 0.0
+
+training:
+  epochs: 30
+  batch_size: 32
+  num_workers: 4
+  head_learning_rate: 0.0003
+  backbone_learning_rate: 0.000001
+  weight_decay: 0.0001
+  temperature: 0.10
+
+  # One clean teacher/anchor plus one controlled underwater view.
+  use_clean_anchor: true
+  max_corruptions_per_view: 1
+  corrupted_view_clean_probability: 0.10
+  horizontal_flip_probability: 0.10
+  severity_probabilities: [0.60, 0.30, 0.10]
+
+  # Preserve DINO's clean ranking while learning degradation invariance.
+  contrastive_weight: 1.0
+  similarity_preservation_weight: 2.0
+  clean_corrupt_consistency_weight: 0.5
+
+  # Adjacent observations and genuine revisits are positives, but trajectory
+  # coordinate systems are never mixed.
+  use_temporal_positive: true
+  temporal_positive_window_sec: 1.0
+  temporal_positive_max_pose_distance_m: 0.75
+  use_spatial_positives: true
+  spatial_positive_radius_m: 1.5
+  spatial_positive_temporal_exclusion_sec: 10.0
+
+  balance_trajectories: true
+  mixed_precision: true
+  early_stopping_patience: 6
+  gradient_clip_norm: 1.0
+  gradient_accumulation: 1
+
+# Validation remains entirely inside MCLab 1/2. Fjord is not read by training.
+splits:
+  policy: chronological
+  train: 0.76
+  guard1: 0.04
+  validation: 0.20
+  guard2: 0.00
+  test: 0.00
+
+evaluation:
+  pose_positive_radius_m: 1.5
+  temporal_exclusion_sec: 10.0
+  recalls: [1, 5, 10]
+  query_stride: 2
+  database_stride: 2
+  allow_progress_fallback: false
+
+robustness:
+  severity_levels: [0, 1, 2, 3]
+  corruptions:
+    - low_light
+    - color_attenuation
+    - haze
+    - blur
+    - marine_snow

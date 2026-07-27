@@ -1,0 +1,6 @@
+project:
+  run_name: mclab1_full
+training:
+  epochs: 20
+  batch_size: 32
+  num_workers: 4

@@ -1,0 +1,88 @@
+project:
+  name: aquaadapt
+  seed: 42
+  run_name: mclab12_train_5hz
+  evaluation_regime: multi_trajectory_training
+  training_trajectories: [mclab_1, mclab_2]
+
+paths:
+  # bag/tum remain present for backward-compatible commands; combined training
+  # uses the two immutable extracted manifests below.
+  bag: /mnt/windows/datasets/ntnu_underwater/subset-mclab/mclab_1/mclab_1.bag
+  tum: /mnt/windows/datasets/ntnu_underwater/subset-mclab/mclab_1/mclab_1_baseline.tum
+  training_manifests:
+    - /mnt/windows/datasets/ntnu_underwater/processed/mclab_1/alphasense_driver_ros_cam0/manifest.csv
+    - /mnt/windows/datasets/ntnu_underwater/processed/mclab_2/alphasense_driver_ros_cam0/manifest.csv
+  calibrations: /mnt/windows/datasets/ntnu_underwater/calibrations
+  # Combined manifests and checkpoints are lightweight; keep them in the
+  # project while the immutable extracted images remain on the dataset mount.
+  processed_root: /home/bb/Aqua_adapt/artifacts
+  torch_home: /mnt/windows/datasets/model_cache/torch
+
+extraction:
+  camera_topic: /alphasense_driver_ros/cam0
+  sample_rate_hz: 5.0
+  max_frames: null
+  jpeg_quality: 95
+  overwrite: false
+  resume: true
+  pose_max_time_difference_sec: 0.10
+  timestamp_offset_sec: 0.0
+
+images:
+  model_size: 224
+  preserve_original: true
+
+model:
+  backbone: dinov2_vits14
+  backbone_dim: 384
+  descriptor_dim: 256
+  pooling: cls
+  freeze_backbone: true
+  unfreeze_last_n_blocks: 0
+  projection_hidden_dim: 512
+  projection_dropout: 0.1
+
+training:
+  epochs: 40
+  batch_size: 32
+  num_workers: 4
+  head_learning_rate: 0.0003
+  backbone_learning_rate: 0.000002
+  weight_decay: 0.0001
+  temperature: 0.07
+  temporal_positive_window_sec: 1.0
+  temporal_positive_max_pose_distance_m: 0.75
+  use_temporal_positive: true
+  balance_trajectories: true
+  mixed_precision: true
+  early_stopping_patience: 8
+  gradient_clip_norm: 1.0
+  gradient_accumulation: 1
+
+# The final test is a different trajectory. These splits only provide a
+# leakage-separated validation set for checkpoint selection.
+splits:
+  policy: chronological
+  train: 0.76
+  guard1: 0.04
+  validation: 0.20
+  guard2: 0.00
+  test: 0.00
+
+evaluation:
+  pose_positive_radius_m: 1.5
+  temporal_exclusion_sec: 10.0
+  recalls: [1, 5, 10]
+  query_stride: 2
+  database_stride: 2
+  allow_progress_fallback: false
+
+robustness:
+  severity_levels: [0, 1, 2, 3]
+  corruptions:
+    - low_light
+    - color_attenuation
+    - haze
+    - blur
+    - marine_snow

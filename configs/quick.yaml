@@ -1,0 +1,12 @@
+project:
+  run_name: mclab1_quick
+extraction:
+  sample_rate_hz: 1.0
+  max_frames: 300
+training:
+  epochs: 1
+  batch_size: 8
+  num_workers: 0
+robustness:
+  severity_levels: [0, 2]
+

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aquaadapt"
+version = "0.1.0"
+description = "Self-supervised adaptation of DINOv2 for underwater place recognition"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+  "numpy>=1.23",
+  "pandas>=1.5",
+  "scipy>=1.9",
+  "opencv-python>=4.6",
+  "Pillow>=9",
+  "PyYAML>=6",
+  "tqdm>=4.64",
+  "matplotlib>=3.6",
+  "scikit-learn>=1.2",
+  "torch>=2.0",
+  "torchvision>=0.15",
+  "rosbags>=0.9.20",
+  "tensorboard>=2.12",
+]
+
+[project.optional-dependencies]
+faiss = ["faiss-cpu>=1.7"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+aquaadapt = "aquaadapt.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["aquaadapt*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+

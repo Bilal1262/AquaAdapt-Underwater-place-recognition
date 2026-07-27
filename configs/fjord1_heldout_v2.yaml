@@ -1,0 +1,83 @@
+project:
+  name: aquaadapt
+  seed: 42
+  run_name: fjord1_heldout_from_mclab12_v2
+  evaluation_regime: held_out_environment_transfer
+  training_trajectory: mclab_1+mclab_2
+  evaluation_trajectory: fjord_1
+
+paths:
+  bag: /mnt/windows/datasets/ntnu_underwater/subset-fjord/fjord_1/fjord_1.bag
+  tum: /mnt/windows/datasets/ntnu_underwater/subset-fjord/fjord_1/fjord_1_baseline.tum
+  calibrations: /mnt/windows/datasets/ntnu_underwater/calibrations
+  processed_root: /home/bb/Aqua_adapt/artifacts/fjord_eval_v2
+  torch_home: /mnt/windows/datasets/model_cache/torch
+
+extraction:
+  camera_topic: /alphasense_driver_ros/cam0
+  sample_rate_hz: 5.0
+  max_frames: null
+  jpeg_quality: 95
+  overwrite: false
+  resume: true
+  pose_max_time_difference_sec: 0.10
+  timestamp_offset_sec: 0.0
+
+images:
+  model_size: 224
+  preserve_original: true
+
+# Must exactly match the V2 checkpoint architecture.
+model:
+  backbone: dinov2_vits14
+  backbone_dim: 384
+  descriptor_dim: 384
+  pooling: cls
+  freeze_backbone: true
+  unfreeze_last_n_blocks: 0
+  adapter_type: residual
+  adapter_scale: 0.25
+  projection_hidden_dim: 512
+  projection_dropout: 0.0
+
+# Used only for evaluation data loading; this file never trains.
+training:
+  epochs: 30
+  batch_size: 32
+  num_workers: 4
+  head_learning_rate: 0.0003
+  backbone_learning_rate: 0.000001
+  weight_decay: 0.0001
+  temperature: 0.10
+  use_temporal_positive: true
+  temporal_positive_window_sec: 1.0
+  temporal_positive_max_pose_distance_m: 0.75
+  mixed_precision: true
+  early_stopping_patience: 6
+  gradient_clip_norm: 1.0
+  gradient_accumulation: 1
+
+splits:
+  policy: all_test
+  train: 0.00
+  guard1: 0.00
+  validation: 0.00
+  guard2: 0.00
+  test: 1.00
+
+evaluation:
+  pose_positive_radius_m: 1.5
+  temporal_exclusion_sec: 10.0
+  recalls: [1, 5, 10]
+  query_stride: 2
+  database_stride: 2
+  allow_progress_fallback: false
+
+robustness:
+  severity_levels: [0, 1, 2, 3]
+  corruptions:
+    - low_light
+    - color_attenuation
+    - haze
+    - blur
+    - marine_snow

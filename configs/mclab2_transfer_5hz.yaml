@@ -1,0 +1,83 @@
+project:
+  name: aquaadapt
+  seed: 42
+  # This run evaluates the mclab_1-trained checkpoint without training on mclab_2.
+  run_name: mclab2_transfer_5hz
+  evaluation_regime: held_out_trajectory_transfer
+  training_trajectory: mclab_1
+  evaluation_trajectory: mclab_2
+
+paths:
+  bag: /mnt/windows/datasets/ntnu_underwater/subset-mclab/mclab_2/mclab_2.bag
+  tum: /mnt/windows/datasets/ntnu_underwater/subset-mclab/mclab_2/mclab_2_baseline.tum
+  calibrations: /mnt/windows/datasets/ntnu_underwater/calibrations
+  processed_root: /mnt/windows/datasets/ntnu_underwater/processed
+  torch_home: /mnt/windows/datasets/model_cache/torch
+
+extraction:
+  # Keep the physical camera consistent with the mclab_1 training trajectory.
+  camera_topic: /alphasense_driver_ros/cam0
+  sample_rate_hz: 5.0
+  max_frames: null
+  jpeg_quality: 95
+  overwrite: false
+  resume: true
+  pose_max_time_difference_sec: 0.10
+  timestamp_offset_sec: 0.0
+
+images:
+  model_size: 224
+  preserve_original: true
+
+model:
+  backbone: dinov2_vits14
+  backbone_dim: 384
+  descriptor_dim: 256
+  pooling: cls
+  freeze_backbone: true
+  unfreeze_last_n_blocks: 0
+  projection_hidden_dim: 512
+  projection_dropout: 0.1
+
+# Included for data-loader settings only. Do not call `train` with this transfer config.
+training:
+  epochs: 40
+  batch_size: 32
+  num_workers: 4
+  head_learning_rate: 0.0003
+  backbone_learning_rate: 0.000002
+  weight_decay: 0.0001
+  temperature: 0.07
+  temporal_positive_window_sec: 1.0
+  temporal_positive_max_pose_distance_m: 0.75
+  use_temporal_positive: true
+  mixed_precision: true
+  early_stopping_patience: 8
+  gradient_clip_norm: 1.0
+  gradient_accumulation: 1
+
+splits:
+  # No mclab_2 frame may be used for fitting this transfer experiment.
+  policy: all_test
+  train: 0.0
+  guard1: 0.0
+  validation: 0.0
+  guard2: 0.0
+  test: 1.0
+
+evaluation:
+  pose_positive_radius_m: 1.5
+  temporal_exclusion_sec: 10.0
+  recalls: [1, 5, 10]
+  query_stride: 2
+  database_stride: 2
+  allow_progress_fallback: false
+
+robustness:
+  severity_levels: [0, 1, 2, 3]
+  corruptions:
+    - low_light
+    - color_attenuation
+    - haze
+    - blur
+    - marine_snow
